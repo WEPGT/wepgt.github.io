@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEPGT Master To‑Do Board</title>
+<style>
+  :root{
+    --bg:#0b1020;
+    --panel:#0f172a;
+    --panel-2:#111827;
+    --ring:#1f2937;
+    --muted:#94a3b8;
+    --text:#e5e7eb;
+    --accent:#60a5fa;
+    --accent-2:#22d3ee;
+    --ok:#34d399;
+    --warn:#f59e0b;
+    --danger:#ef4444;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:
+      radial-gradient(1100px 600px at 110% -10%, rgba(34,211,238,.12), transparent),
+      radial-gradient(1200px 700px at -10% -20%, rgba(96,165,250,.16), transparent),
+      var(--bg);
+    color:var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial;
+  }
+  header{
+    position:sticky;top:0;z-index:10;
+    backdrop-filter: blur(8px);
+    background: rgba(11,16,32,.7);
+    border-bottom:1px solid var(--ring);
+  }
+  .container{max-width:1200px;margin:0 auto;padding:16px}
+  h1{margin:0;font-size:clamp(22px,3vw,32px)}
+  .sub{color:var(--muted);font-size:14px}
+  .toolbar{
+    display:flex;gap:10px;flex-wrap:wrap;margin-top:10px
+  }
+  .toolbar > *{border:1px solid var(--ring);background:var(--panel);color:var(--text);padding:8px 10px;border-radius:12px}
+  .toolbar input, .toolbar select{background:#0b1220}
+  button{cursor:pointer;border:none}
+  button.primary{background:var(--accent);color:#081120;font-weight:700;border:1px solid transparent}
+  button.ghost{background:var(--panel-2)}
+  .board{display:grid;grid-template-columns: repeat(5, 1fr); gap:14px; padding:18px}
+  .col{
+    background: linear-gradient(180deg, rgba(17,24,39,.9), rgba(17,24,39,.7));
+    border:1px solid var(--ring); border-radius:16px; padding:12px;
+    min-height: 280px;
+  }
+  .col h3{margin:0 0 8px 0; font-size:14px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+  .drop{min-height: 40px; display:flex; flex-direction:column; gap:10px}
+  .card{
+    background:#0b1220; border:1px solid var(--ring);
+    border-radius:14px; padding:12px; cursor:grab;
+  }
+  .card.dragging{opacity:.5}
+  .title{font-weight:700;margin-bottom:6px}
+  .meta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+  .tag{padding:2px 8px;border-radius:999px;border:1px solid var(--ring);background:#0f172a}
+  .prio-high{color:var(--danger)}
+  .prio-med{color:var(--warn)}
+  .prio-low{color:var(--ok)}
+  .controls{display:flex;gap:8px;margin-top:8px}
+  .controls button{padding:6px 8px;border-radius:10px;background:#111827;color:var(--text);border:1px solid var(--ring)}
+  .controls button:hover{border-color:var(--accent)}
+  .footer{color:var(--muted);font-size:12px;margin-top:8px}
+  .focus-wrap{
+    position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:50;
+  }
+  .focus{width:min(720px, 94vw); background:var(--panel); border:1px solid var(--ring); border-radius:16px; padding:16px}
+  .focus h2{margin:0 0 8px 0}
+  .focus textarea{width:100%;min-height:120px;background:#0b1220;color:var(--text);border:1px solid var(--ring);border-radius:12px;padding:10px}
+  .muted{color:var(--muted)}
+  @media (max-width: 1000px){
+    .board{grid-template-columns: repeat(2, 1fr);}
+  }
+  @media (max-width: 640px){
+    .board{grid-template-columns: 1fr;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div>
+        <h1>WEPGT Master To‑Do Board</h1>
+        <div class="sub">Drag tasks between columns. Data is saved in your browser (localStorage). Export/Import anytime.</div>
+      </div>
+      <div class="toolbar">
+        <input id="search" placeholder="Search tasks…">
+        <select id="filterProject">
+          <option value="">All projects</option>
+          <option>WEPGT Website</option>
+          <option>Cloud Project</option>
+          <option>R.A.T.</option>
+          <option>Resident‑Verifier</option>
+          <option>BP/Glucose Form</option>
+          <option>Wi‑Fi Proposal</option>
+          <option>Branding/Profiles</option>
+        </select>
+        <select id="filterWhen">
+          <option value="">Any time</option>
+          <option value="today">Due today</option>
+          <option value="week">Due this week</option>
+          <option value="overdue">Overdue</option>
+        </select>
+        <button id="new" class="primary">+ New Task</button>
+        <button id="export" class="ghost">Export JSON</button>
+        <button id="import" class="ghost">Import JSON</button>
+        <button id="sample" class="ghost">Reset Sample Data</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <section class="board" id="board">
+    <!-- Columns -->
+    <div class="col" data-col="inprogress">
+      <h3>In Progress</h3>
+      <div class="drop" id="inprogress"></div>
+    </div>
+    <div class="col" data-col="pending">
+      <h3>Pending / Next Up</h3>
+      <div class="drop" id="pending"></div>
+    </div>
+    <div class="col" data-col="backlog">
+      <h3>Backlog / Future</h3>
+      <div class="drop" id="backlog"></div>
+    </div>
+    <div class="col" data-col="maintenance">
+      <h3>Maintenance / Review</h3>
+      <div class="drop" id="maintenance"></div>
+    </div>
+    <div class="col" data-col="done">
+      <h3>Done</h3>
+      <div class="drop" id="done"></div>
+    </div>
+  </section>
+  <div class="footer">Pro tip: Press <b>N</b> to create a task, <b>/</b> to search, and drag cards to update status.</div>
+</main>
+
+<!-- Focus / detail modal -->
+<div class="focus-wrap" id="focusWrap" role="dialog" aria-modal="true">
+  <div class="focus">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+      <h2 id="focusTitle">Task</h2>
+      <div class="muted" id="focusId"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div>
+        <label class="muted">Project</label>
+        <select id="fProject">
+          <option>WEPGT Website</option>
+          <option>Cloud Project</option>
+          <option>R.A.T.</option>
+          <option>Resident‑Verifier</option>
+          <option>BP/Glucose Form</option>
+          <option>Wi‑Fi Proposal</option>
+          <option>Branding/Profiles</option>
+        </select>
+      </div>
+      <div>
+        <label class="muted">Priority</label>
+        <select id="fPriority">
+          <option>Low</option>
+          <option selected>Medium</option>
+          <option>High</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div>
+        <label class="muted">Due date</label>
+        <input type="date" id="fDue">
+      </div>
+      <div>
+        <label class="muted">Tags (comma separated)</label>
+        <input type="text" id="fTags" placeholder="seo, prisma, docs">
+      </div>
+    </div>
+
+    <div>
+      <label class="muted">Notes</label>
+      <textarea id="fNotes" placeholder="Details, links, acceptance criteria…"></textarea>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
+      <button id="fDelete" class="ghost">Delete</button>
+      <button id="fClose" class="primary">Save & Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const KEY = 'wepgt_board_v1';
+
+const projects = ["WEPGT Website","Cloud Project","R.A.T.","Resident‑Verifier","BP/Glucose Form","Wi‑Fi Proposal","Branding/Profiles"];
+const columns = ["inprogress","pending","backlog","maintenance","done"];
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+function sampleData(){
+  const due = (d) => {
+    const dt = new Date(); dt.setDate(dt.getDate()+d);
+    return dt.toISOString().slice(0,10);
+  };
+  return [
+    {id:uid(), title:"Fix header/logo sizing & About page globe", project:"WEPGT Website", prio:"High", due:due(2), tags:["seo","ui"], notes:"Ensure globe rotates E→W, adjust opacity and spacing.", col:"inprogress"},
+    {id:uid(), title:"Terraform/AWS doc: S3 static site + CloudFront", project:"Cloud Project", prio:"Medium", due:due(5), tags:["terraform","aws","docs"], notes:"Address provider profile error; switch to aws_s3_bucket_website_configuration.", col:"inprogress"},
+    {id:uid(), title:"R.A.T. refactor (Express + Prisma) – stabilize schema", project:"R.A.T.", prio:"High", due:due(7), tags:["prisma","sqlite"], notes:"Keep a single source-of-truth dashboard.ejs. Add migrations checklist.", col:"pending"},
+    {id:uid(), title:"Resident‑Verifier: cross‑platform build + mobile access how‑to", project:"Resident‑Verifier", prio:"Medium", due:due(9), tags:["windows","wsl","mobile"], notes:"Docs: run on new PC, handle better-sqlite3 Win32 mismatch.", col:"pending"},
+    {id:uid(), title:"BP/Glucose Monitoring — publish PDF & HTML on WEPGT.com", project:"BP/Glucose Form", prio:"Low", due:due(4), tags:["health","html","pdf"], notes:"Add link from nav; logo + colors.", col:"pending"},
+    {id:uid(), title:"Wi‑Fi extension proposal – parts list & labor rates", project:"Wi‑Fi Proposal", prio:"Low", due:due(14), tags:["starlink","bridge"], notes:"350‑ft bridge BOM; include bag of cement ;)", col:"backlog"},
+    {id:uid(), title:"Branding alignment: LinkedIn + GitHub", project:"Branding/Profiles", prio:"Medium", due:due(6), tags:["banner","favicon"], notes:"Ensure WEPGT favicon shows and ContactPoint schema is correct.", col:"maintenance"}
+  ];
+}
+
+function load(){
+  const raw = localStorage.getItem(KEY);
+  if(!raw){
+    const data = sampleData();
+    saveAll(data);
+    return data;
+  }
+  try{
+    return JSON.parse(raw);
+  }catch(e){
+    const data = sampleData();
+    saveAll(data);
+    return data;
+  }
+}
+
+function saveAll(items){
+  localStorage.setItem(KEY, JSON.stringify(items));
+}
+
+function saveItem(item){
+  const items = load().filter(x=>x.id!==item.id).concat([item]);
+  saveAll(items);
+}
+
+function removeItem(id){
+  const items = load().filter(x=>x.id!==id);
+  saveAll(items);
+}
+
+function el(tag, attrs={}, ...children){
+  const node = document.createElement(tag);
+  Object.entries(attrs).forEach(([k,v]) => {
+    if(k==='class') node.className = v;
+    else if(k==='dataset') Object.assign(node.dataset, v);
+    else if(k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k,v);
+  });
+  children.flat().forEach(c => {
+    if(c==null) return;
+    node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  });
+  return node;
+}
+
+function badge(text){ return el('span',{class:'tag'}, text); }
+
+function cardView(item){
+  const {id,title,project,prio,due,tags=[],notes=""} = item;
+  const meta = el('div',{class:'meta'});
+  meta.append(
+    badge(project),
+    el('span',{class:`prio-${prio.toLowerCase()}`}, prio),
+    due ? el('span',{}, 'Due: ', due) : '',
+    ...tags.map(t => badge('#'+t))
+  );
+
+  const c = el('div',{class:'card', draggable:'true', dataset:{id}},
+    el('div',{class:'title'}, title),
+    meta,
+    notes ? el('div',{class:'muted', style:'margin-top:6px;font-size:12px'}, notes.slice(0,160) + (notes.length>160?'…':'')) : null,
+    el('div',{class:'controls'},
+      el('button',{onClick:()=>openFocus(id)},'Open'),
+      el('button',{onClick:()=>quickMove(id,'done')},'Mark Done')
+    )
+  );
+
+  c.addEventListener('dragstart', e => {
+    c.classList.add('dragging');
+    e.dataTransfer.setData('text/plain', id);
+  });
+  c.addEventListener('dragend', () => c.classList.remove('dragging'));
+  return c;
+}
+
+function render(){
+  const items = load();
+  // filters
+  const term = document.getElementById('search').value.toLowerCase();
+  const proj = document.getElementById('filterProject').value;
+  const when = document.getElementById('filterWhen').value;
+
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Mon
+  const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate()+6);
+
+  const matchWhen = (dStr) => {
+    if(!dStr) return when==="";
+    const d = new Date(dStr+"T00:00:00");
+    if(when==="today") return d.toDateString() === now.toDateString();
+    if(when==="week") return d >= startOfWeek && d <= endOfWeek;
+    if(when==="overdue") return d < new Date(now.toDateString());
+    return true;
+  };
+
+  const map = Object.fromEntries(columns.map(c=>[c,[]]));
+  items.forEach(item => {
+    const okTerm = !term || (item.title.toLowerCase().includes(term) || (item.notes||'').toLowerCase().includes(term) || (item.tags||[]).join(',').toLowerCase().includes(term));
+    const okProj = !proj || item.project===proj;
+    const okWhen = when==="" || matchWhen(item.due);
+    if(okTerm && okProj && okWhen){
+      map[item.col||'backlog'].push(item);
+    }
+  });
+
+  columns.forEach(col => {
+    const drop = document.getElementById(col);
+    drop.innerHTML = "";
+    map[col].sort((a,b)=> (a.prio>b.prio?-1:1)); // rough: High>Med>Low
+    map[col].forEach(item => drop.appendChild(cardView(item)));
+  });
+}
+
+function setupDnD(){
+  document.querySelectorAll('.drop').forEach(drop => {
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.style.outline='2px dashed var(--accent)'; drop.style.outlineOffset='-6px'; });
+    drop.addEventListener('dragleave', () => { drop.style.outline=''; });
+    drop.addEventListener('drop', e => {
+      e.preventDefault();
+      drop.style.outline='';
+      const id = e.dataTransfer.getData('text/plain');
+      const items = load();
+      const item = items.find(x=>x.id===id);
+      if(item){
+        item.col = drop.id;
+        saveItem(item);
+        render();
+      }
+    });
+  });
+}
+
+function newTaskQuick(){
+  const title = prompt("Task title:");
+  if(!title) return;
+  const project = prompt("Project (leave blank for WEPGT Website):
+" + projects.join(", "));
+  const prio = prompt("Priority (Low, Medium, High):", "Medium");
+  const due = prompt("Due date (YYYY-MM-DD):", "");
+  const tags = prompt("Tags (comma separated):","");
+  const notes = prompt("Notes:","");
+  const item = {id:uid(), title, project: project||"WEPGT Website", prio: (prio||"Medium"), due: (due||""), tags: tags?tags.split(',').map(s=>s.trim()).filter(Boolean):[], notes, col:"pending"};
+  saveItem(item);
+  render();
+}
+
+function quickMove(id, col){
+  const items = load();
+  const item = items.find(x=>x.id===id);
+  if(!item) return;
+  item.col = col;
+  saveItem(item);
+  render();
+}
+
+let focusId = null;
+function openFocus(id){
+  focusId = id;
+  const item = load().find(x=>x.id===id);
+  if(!item) return;
+  document.getElementById('focusWrap').style.display='flex';
+  document.getElementById('focusTitle').textContent = item.title;
+  document.getElementById('focusId').textContent = "ID: " + item.id;
+  document.getElementById('fProject').value = item.project || "WEPGT Website";
+  document.getElementById('fPriority').value = item.prio || "Medium";
+  document.getElementById('fDue').value = item.due || "";
+  document.getElementById('fTags').value = (item.tags||[]).join(', ');
+  document.getElementById('fNotes').value = item.notes || "";
+}
+
+function closeFocus(save=true){
+  const wrap = document.getElementById('focusWrap');
+  if(save && focusId){
+    const items = load();
+    const item = items.find(x=>x.id===focusId);
+    if(item){
+      item.project = document.getElementById('fProject').value;
+      item.prio = document.getElementById('fPriority').value;
+      item.due = document.getElementById('fDue').value;
+      item.tags = document.getElementById('fTags').value.split(',').map(s=>s.trim()).filter(Boolean);
+      item.notes = document.getElementById('fNotes').value;
+      saveItem(item);
+    }
+  }
+  wrap.style.display='none';
+  render();
+}
+
+function exportJSON(){
+  const blob = new Blob([localStorage.getItem(KEY)||'[]'], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'wepgt_board.json';
+  a.click();
+}
+
+function importJSON(){
+  const inp = document.createElement('input');
+  inp.type='file'; inp.accept='application/json';
+  inp.onchange = () => {
+    const file = inp.files[0]; if(!file) return;
+    const fr = new FileReader();
+    fr.onload = () => { try{ saveAll(JSON.parse(fr.result)); render(); } catch(e){ alert('Invalid JSON'); } };
+    fr.readAsText(file);
+  };
+  inp.click();
+}
+
+function resetSample(){
+  if(confirm('Replace current tasks with sample data?')){
+    saveAll(sampleData());
+    render();
+  }
+}
+
+function setupUI(){
+  document.getElementById('new').addEventListener('click', newTaskQuick);
+  document.getElementById('export').addEventListener('click', exportJSON);
+  document.getElementById('import').addEventListener('click', importJSON);
+  document.getElementById('sample').addEventListener('click', resetSample);
+  document.getElementById('search').addEventListener('input', render);
+  document.getElementById('filterProject').addEventListener('change', render);
+  document.getElementById('filterWhen').addEventListener('change', render);
+  document.getElementById('fClose').addEventListener('click', () => closeFocus(true));
+  document.getElementById('fDelete').addEventListener('click', () => {
+    if(focusId && confirm('Delete this task?')){ removeItem(focusId); closeFocus(false); }
+  });
+  document.getElementById('focusWrap').addEventListener('click', (e) => {
+    if(e.target.id==='focusWrap') closeFocus(false);
+  });
+  // shortcuts
+  window.addEventListener('keydown', (e)=>{
+    if(e.key==='/' && document.activeElement.tagName!=='INPUT'){ e.preventDefault(); document.getElementById('search').focus(); }
+    if(e.key==='n' || e.key==='N'){ if(document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='TEXTAREA'){ newTaskQuick(); } }
+    if(e.key==='Escape'){ closeFocus(false); }
+  });
+}
+
+function setupDnD(){
+  document.querySelectorAll('.drop').forEach(drop => {
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.style.outline='2px dashed var(--accent)'; drop.style.outlineOffset='-6px'; });
+    drop.addEventListener('dragleave', () => { drop.style.outline=''; });
+    drop.addEventListener('drop', e => {
+      e.preventDefault();
+      drop.style.outline='';
+      const id = e.dataTransfer.getData('text/plain');
+      const items = load();
+      const item = items.find(x=>x.id===id);
+      if(item){
+        item.col = drop.id;
+        saveItem(item);
+        render();
+      }
+    });
+  });
+}
+
+function init(){
+  load(); // ensure exists
+  render();
+  setupDnD();
+  setupUI();
+}
+init();
+</script>
+</body>
+</html>
